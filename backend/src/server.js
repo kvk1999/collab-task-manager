@@ -11,27 +11,22 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Required for ES modules to get __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 app.use(cors());
 app.use(express.json());
 
-// Connect MongoDB
+// Database connection
 connectDB();
 
-// API routes first
+// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 
-// -----------------------------
-// Serve React frontend
-// -----------------------------
-const frontendPath = path.join(__dirname, 'public'); // after build, copy React files here
-app.use(express.static(frontendPath));
+// Serve frontend build
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendPath = path.join(__dirname, '../frontend/dist');
 
-// Any route not starting with /api should serve index.html
+app.use(express.static(frontendPath));
 app.get('*', (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
