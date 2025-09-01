@@ -12,7 +12,7 @@ export default function Auth() {
       <div className="absolute inset-0 bg-black opacity-50"></div>
 
       {/* Form container */}
-      <div className="relative bg-white bg-opacity-90 p-8 rounded shadow-md w-96 z-10">
+      <div className="relative bg-white bg-opacity-90 p-8 rounded shadow-md w-96">
         <h2 className="text-2xl font-bold mb-4 text-center">
           {isLogin ? "Login" : "Sign Up"}
         </h2>
