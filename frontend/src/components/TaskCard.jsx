@@ -4,13 +4,24 @@ export default function TaskCard({ task, provided, snapshot, onEdit, onDelete })
       ref={provided.innerRef}
       {...provided.draggableProps}
       {...provided.dragHandleProps}
-      className={`bg-white p-4 rounded shadow mb-3 transition ${snapshot?.isDragging ? "ring-2 ring-blue-400" : ""}`}
+      className={`p-3 mb-2 rounded shadow bg-black bg-opacity-70 text-yellow-300 transition 
+        ${snapshot.isDragging ? "border-2 border-yellow-400" : ""}`}
     >
-      <h3 className="font-semibold">{task.title}</h3>
-      <p className="text-sm text-gray-600">{task.description}</p>
-      <div className="mt-2 flex gap-2">
-        <button onClick={() => onEdit(task)} className="text-yellow-600">Edit</button>
-        <button onClick={() => onDelete(task._id)} className="text-red-600">Delete</button>
+      <h4 className="font-bold">{task.title}</h4>
+      <p className="text-sm mb-2">{task.description}</p>
+      <div className="flex justify-between text-xs">
+        <button
+          onClick={() => onEdit(task)}
+          className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => onDelete(task._id)}
+          className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
