@@ -20,29 +20,7 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("All");
   const debounceRef = useRef(null);
 
-  // Group tasks by status
-  const columns = useMemo(() => {
-    const map = { "To Do": [], "In Progress": [], "Done": [] };
-    for (const t of tasks) {
-      if (map[t.status]) map[t.status].push(t);
-    }
-    return map;
-  }, [tasks]);
-
-  // Derived tasks after search & filter
-  const visibleTasks = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return tasks.filter((t) => {
-      const matchesStatus = statusFilter === "All" || t.status === statusFilter;
-      const matchesQuery =
-        !q ||
-        (t.title && t.title.toLowerCase().includes(q)) ||
-        (t.description && t.description.toLowerCase().includes(q));
-      return matchesStatus && matchesQuery;
-    });
-  }, [tasks, query, statusFilter]);
-
-  // Fetch tasks
+  // Fetch tasks from API
   const fetchTasks = async () => {
     try {
       setLoading(true);
@@ -59,30 +37,13 @@ export default function Dashboard() {
   // Connect socket + listeners
   useEffect(() => {
     fetchTasks();
-
     const token = localStorage.getItem("token");
     const socket = connectSocket(token);
-
     if (!socket) return;
 
-    // when new task created by anyone
-    socket.on("task:created", (task) => {
-      setTasks((prev) => {
-        // avoid duplicate
-        if (prev.some((p) => p._id === task._id)) return prev;
-        return [...prev, task];
-      });
-    });
-
-    // when task updated
-    socket.on("task:updated", (task) => {
-      setTasks((prev) => prev.map((t) => (t._id === task._id ? task : t)));
-    });
-
-    // when task deleted
-    socket.on("task:deleted", (taskId) => {
-      setTasks((prev) => prev.filter((t) => t._id !== taskId));
-    });
+    socket.on("task:created", (task) => setTasks((prev) => (prev.some((p) => p._id === task._id) ? prev : [...prev, task])));
+    socket.on("task:updated", (task) => setTasks((prev) => prev.map((t) => (t._id === task._id ? task : t))));
+    socket.on("task:deleted", (taskId) => setTasks((prev) => prev.filter((t) => t._id !== taskId)));
 
     return () => {
       socket.off("task:created");
@@ -90,7 +51,6 @@ export default function Dashboard() {
       socket.off("task:deleted");
       disconnectSocket();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleLogout = () => {
@@ -99,14 +59,12 @@ export default function Dashboard() {
     navigate("/");
   };
 
-  // create
+  // Create task
   const handleCreateTask = async (e) => {
     e.preventDefault();
     try {
       const res = await createTask(newTask);
-      // optimistic: server will emit 'task:created' to everyone
       setNewTask({ title: "", description: "", status: "To Do" });
-      // if backend doesn't emit, manually append:
       if (res?.data) setTasks((prev) => [...prev, res.data]);
     } catch (err) {
       console.error(err);
@@ -114,11 +72,11 @@ export default function Dashboard() {
     }
   };
 
+  // Delete task
   const handleDeleteTask = async (id) => {
     if (!window.confirm("Delete this task?")) return;
     try {
       await deleteTask(id);
-      // server ideally emits task:deleted; but remove locally as fallback
       setTasks((prev) => prev.filter((t) => t._id !== id));
     } catch (err) {
       console.error(err);
@@ -126,12 +84,12 @@ export default function Dashboard() {
     }
   };
 
+  // Save edited task
   const handleSaveEdit = async (id) => {
     try {
       const payload = { title: editingTask.title, description: editingTask.description, status: editingTask.status };
       await updateTask(id, payload);
       setEditingTask(null);
-      // server emits task:updated; else refetch or apply change locally:
       setTasks((prev) => prev.map((t) => (t._id === id ? { ...t, ...payload } : t)));
     } catch (err) {
       console.error(err);
@@ -139,47 +97,50 @@ export default function Dashboard() {
     }
   };
 
-  // Drag & Drop handler
+  // Drag & Drop
   const onDragEnd = async (result) => {
     const { destination, source } = result;
     if (!destination) return;
-    const sourceStatus = source.droppableId;
-    const destStatus = destination.droppableId;
-    if (sourceStatus === destStatus && source.index === destination.index) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-    const dragged = columns[sourceStatus][source.index];
+    const dragged = tasks.find((t) => t.status === source.droppableId && tasks.indexOf(t) === source.index);
     if (!dragged) return;
 
-    // optimistic update: change status locally
-    setTasks((prev) => prev.map((t) => (t._id === dragged._id ? { ...t, status: destStatus } : t)));
+    // Optimistic update
+    setTasks((prev) => prev.map((t) => (t._id === dragged._id ? { ...t, status: destination.droppableId } : t)));
 
     try {
-      await updateTask(dragged._id, { ...dragged, status: destStatus });
-      // optionally emit client-side event if backend expects it:
+      await updateTask(dragged._id, { ...dragged, status: destination.droppableId });
       const socket = getSocket();
-      if (socket && socket.connected) {
-        socket.emit("task:moved", { id: dragged._id, status: destStatus });
-      }
+      if (socket && socket.connected) socket.emit("task:moved", { id: dragged._id, status: destination.droppableId });
     } catch (err) {
-      console.error("Drag update error:", err);
-      alert("Failed to move task, reverting.");
-      setTasks((prev) => prev.map((t) => (t._id === dragged._id ? { ...t, status: sourceStatus } : t)));
+      console.error(err);
+      setTasks((prev) => prev.map((t) => (t._id === dragged._id ? { ...t, status: source.droppableId } : t)));
+      alert("Failed to move task");
     }
   };
 
-  // Debounced query setter
+  // Search debounce
   const handleQueryChange = (value) => {
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setQuery(value);
-    }, 300);
+    debounceRef.current = setTimeout(() => setQuery(value), 300);
   };
 
+  // Filtered tasks
+  const visibleTasks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tasks.filter((t) => {
+      const matchesStatus = statusFilter === "All" || t.status === statusFilter;
+      const matchesQuery = !q || (t.title?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q));
+      return matchesStatus && matchesQuery;
+    });
+  }, [tasks, query, statusFilter]);
+
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      {/* Header + search/filter */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+    <div className="min-h-screen bg-gradient-to-r from-blue-100 to-purple-100 flex flex-col items-center p-8 text-gray-800">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 w-full max-w-6xl">
+        <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
         <div className="flex gap-3 items-center">
           <input
             type="text"
@@ -187,16 +148,22 @@ export default function Dashboard() {
             onChange={(e) => handleQueryChange(e.target.value)}
             className="border p-2 rounded"
           />
-          <select className="border p-2 rounded" onChange={(e) => setStatusFilter(e.target.value)} value={statusFilter}>
+          <select
+            className="border p-2 rounded"
+            onChange={(e) => setStatusFilter(e.target.value)}
+            value={statusFilter}
+          >
             <option value="All">All</option>
-            {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
           <button onClick={handleLogout} className="bg-red-500 text-white px-3 py-2 rounded">Logout</button>
         </div>
       </div>
 
       {/* Create Task */}
-      <form onSubmit={handleCreateTask} className="bg-white p-4 rounded shadow mb-6">
+      <form onSubmit={handleCreateTask} className="bg-white p-4 rounded shadow mb-6 w-full max-w-6xl">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
             type="text"
@@ -214,39 +181,50 @@ export default function Dashboard() {
             onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
             required
           />
-          <select className="border p-2 rounded" value={newTask.status} onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}>
+          <select
+            className="border p-2 rounded"
+            value={newTask.status}
+            onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+          >
             {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
           </select>
           <button type="submit" className="bg-blue-600 text-white rounded px-4 py-2">Add</button>
         </div>
       </form>
 
-      {/* Drag & Drop columns */}
+      {/* Drag & Drop */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="flex gap-6 w-full max-w-6xl justify-center">
           {STATUSES.map((status) => (
             <Droppable droppableId={status} key={status}>
               {(provided, snapshot) => (
                 <div
                   ref={provided.innerRef}
                   {...provided.droppableProps}
-                  className={`bg-gray-50 rounded p-4 min-h-[300px] shadow ${snapshot.isDraggingOver ? "ring-2 ring-blue-400" : ""}`}
+                  className={`bg-gray-50 rounded p-4 min-h-[300px] shadow w-80 ${snapshot.isDraggingOver ? "ring-2 ring-blue-400" : ""}`}
                 >
-                  <h3 className="font-bold mb-3">{status}</h3>
-
-                  {(visibleTasks.filter(t => t.status === status) || []).map((task, index) => (
+                  <h3 className="font-bold mb-3 text-gray-700">{status}</h3>
+                  {visibleTasks.filter((t) => t.status === status).map((task, index) => (
                     <Draggable draggableId={task._id} index={index} key={task._id}>
                       {(dragProvided, dragSnapshot) =>
                         editingTask?.id === task._id ? (
                           <div className="bg-white p-4 rounded shadow mb-3">
-                            {/* edit form */}
-                            <input className="border p-2 w-full mb-2 rounded" value={editingTask.title}
-                              onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })} />
-                            <textarea className="border p-2 w-full mb-2 rounded" value={editingTask.description}
-                              onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })} />
-                            <select className="border p-2 w-full mb-2 rounded" value={editingTask.status}
-                              onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })}>
-                              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            <input
+                              className="border p-2 w-full mb-2 rounded"
+                              value={editingTask.title}
+                              onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                            />
+                            <textarea
+                              className="border p-2 w-full mb-2 rounded"
+                              value={editingTask.description}
+                              onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
+                            />
+                            <select
+                              className="border p-2 w-full mb-2 rounded"
+                              value={editingTask.status}
+                              onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })}
+                            >
+                              {STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
                             </select>
                             <div className="flex gap-2">
                               <button onClick={() => handleSaveEdit(task._id)} className="bg-green-600 text-white px-3 py-1 rounded">Save</button>
@@ -265,7 +243,6 @@ export default function Dashboard() {
                       }
                     </Draggable>
                   ))}
-
                   {provided.placeholder}
                 </div>
               )}
