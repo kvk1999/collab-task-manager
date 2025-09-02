@@ -6,7 +6,7 @@
  "scripts": {
   "start": "node src/server.js",
   "dev": "nodemon src/server.js",
-  "build":"cd ../frontend && npm install && npm run build && cp -r dist ../backend/"
+  "build": "cd ../frontend && npm install && npm run build && cp -r dist ../backend/"
  },
  "keywords": [],
  "author": "",
@@ -20,6 +20,7 @@
   "express": "^5.1.0",
   "jsonwebtoken": "^9.0.2",
   "mongoose": "^8.18.0",
-  "nodemon": "^3.1.10"
+  "nodemon": "^3.1.10",
+  "socket.io": "^4.8.1"
  }
 }
