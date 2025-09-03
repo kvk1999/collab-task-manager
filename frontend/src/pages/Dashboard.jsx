@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { getTasks, createTask, updateTask, deleteTask } from "../api/tasks";
 import TaskCard from "../components/TaskCard";
+import Navbar from "../components/Navbar";
 
 const STATUSES = ["To Do", "In Progress", "Done"];
 
@@ -119,12 +120,24 @@ export default function Dashboard() {
 
   return (
     <div
-      className="min-h-screen p-6 bg-cover bg-center flex flex-col gap-6"
-      style={{
-        backgroundImage:
-          "url('https://png.pngtree.com/thumb_back/fh260/background/20211031/pngtree-abstract-bg-image_914283.png')",
-      }}
-    >
+  className="min-h-screen p-6 flex flex-col gap-6"
+  style={{
+    backgroundImage:
+      "url('https://png.pngtree.com/thumb_back/fh260/background/20211031/pngtree-abstract-bg-image_914283.png')",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat",
+  }}
+>
+<Navbar
+        query={query}
+        setQuery={handleQueryChange}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+      />
+
+
+
       {/* Search + Filter */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-yellow-300">Dashboard</h1>
